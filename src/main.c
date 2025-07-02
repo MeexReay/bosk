@@ -1,15 +1,26 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include <syscall.h>
 #include <unistd.h>
 #include <sys/mman.h>
 
 #include <wayland-client.h>
+#include <wayland-client-protocol.h>
+
+#include "../xdg-shell-client-protocol.h"
 
 struct wl_compositor *compositor;
 struct wl_shm *shm;
-struct wl_shell *shell;
+struct xdg_wm_base *xdg;
+
+bool configured = false;
+bool running = true;
+
+struct wl_surface *surface;
+struct xdg_surface *xdg_surface;
+struct xdg_toplevel *xdg_toplevel;
 
 void registry_global_handler
 (
@@ -25,9 +36,9 @@ void registry_global_handler
     } else if (strcmp(interface, "wl_shm") == 0) {
         shm = wl_registry_bind(registry, name,
             &wl_shm_interface, 1);
-    } else if (strcmp(interface, "wl_shell") == 0) {
-        shell = wl_registry_bind(registry, name,
-            &wl_shell_interface, 1);
+    } else if (strcmp(interface, "xdg_wm_base") == 0) {
+        xdg = wl_registry_bind(registry, name,
+            &xdg_wm_base_interface, 1);
     }
 }
 
@@ -43,6 +54,49 @@ const struct wl_registry_listener registry_listener = {
     .global_remove = registry_global_remove_handler
 };
 
+void xdg_wm_base_handle_ping(void *data,
+		struct xdg_wm_base *xdg_wm_base, uint32_t serial) {
+	// The compositor will send us a ping event to check that we're responsive.
+	// We need to send back a pong request immediately.
+	xdg_wm_base_pong(xdg_wm_base, serial);
+}
+
+const struct xdg_wm_base_listener xdg_wm_base_listener = {
+	.ping = xdg_wm_base_handle_ping,
+};
+
+void xdg_surface_handle_configure(void *data,
+		struct xdg_surface *xdg_surface, uint32_t serial) {
+	// The compositor configures our surface, acknowledge the configure event
+	xdg_surface_ack_configure(xdg_surface, serial);
+
+	if (configured) {
+		// If this isn't the first configure event we've received, we already
+		// have a buffer attached, so no need to do anything. Commit the
+		// surface to apply the configure acknowledgement.
+		wl_surface_commit(surface);
+	}
+
+	configured = true;
+}
+
+static const struct xdg_surface_listener xdg_surface_listener = {
+	.configure = xdg_surface_handle_configure,
+};
+
+void noop() {}
+
+static void xdg_toplevel_handle_close(void *data,
+		struct xdg_toplevel *xdg_toplevel) {
+	// Stop running if the user requests to close the toplevel
+	running = false;
+}
+
+static const struct xdg_toplevel_listener xdg_toplevel_listener = {
+	.configure = noop,
+	.close = xdg_toplevel_handle_close,
+};
+
 int main(void) {
     struct wl_display *display = wl_display_connect(NULL);
     struct wl_registry *registry = wl_display_get_registry(display);
@@ -51,10 +105,18 @@ int main(void) {
     // wait for the "initial" set of globals to appear
     wl_display_roundtrip(display);
 
-    struct wl_surface *surface = wl_compositor_create_surface(compositor);
-    struct wl_shell_surface *shell_surface = wl_shell_get_shell_surface(shell, surface); // segfault
-    wl_shell_surface_set_toplevel(shell_surface);
+    surface = wl_compositor_create_surface(compositor);
+    xdg_surface = xdg_wm_base_get_xdg_surface(xdg, surface);
+    xdg_toplevel = xdg_surface_get_toplevel(xdg_surface);
+    
+    xdg_surface_add_listener(xdg_surface, &xdg_surface_listener, NULL);
+    xdg_toplevel_add_listener(xdg_toplevel, &xdg_toplevel_listener, NULL);
 
+		wl_surface_commit(surface);
+    while (!configured) {
+        wl_display_dispatch(display);
+    }
+    
     int width = 200;
     int height = 200;
     int stride = width * 4;
@@ -77,9 +139,14 @@ int main(void) {
     wl_surface_attach(surface, buffer, 0, 0);
     wl_surface_commit(surface);
 
-    while (1) {
+    while (running) {
         wl_display_dispatch(display);
     }
+
+	  xdg_toplevel_destroy(xdg_toplevel);
+	  xdg_surface_destroy(xdg_surface);
+	  wl_surface_destroy(surface);
+	  wl_buffer_destroy(buffer);
 
     return 0;
 }
