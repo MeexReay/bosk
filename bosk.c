@@ -21,9 +21,11 @@ bool running = true;
 struct wl_surface *surface;
 struct xdg_surface *xdg_surface;
 struct xdg_toplevel *xdg_toplevel;
+struct wl_buffer *buffer;
+struct wl_display *display;
     
-int width = 200;
-int height = 200;
+int width = 500;
+int height = 500;
 
 void registry_global_handler
 (
@@ -100,8 +102,9 @@ static const struct xdg_toplevel_listener xdg_toplevel_listener = {
 	.close = xdg_toplevel_handle_close,
 };
 
-int main(void) {
-    struct wl_display *display = wl_display_connect(NULL);
+void configure() {
+    display = wl_display_connect(NULL);
+    
     struct wl_registry *registry = wl_display_get_registry(display);
     wl_registry_add_listener(registry, &registry_listener, NULL);
 
@@ -114,13 +117,14 @@ int main(void) {
     
     xdg_surface_add_listener(xdg_surface, &xdg_surface_listener, NULL);
     xdg_toplevel_add_listener(xdg_toplevel, &xdg_toplevel_listener, NULL);
+    xdg_wm_base_add_listener(xdg, &xdg_wm_base_listener, NULL);
 
     wl_surface_commit(surface);
 
-    while (!configured) {
-        wl_display_dispatch(display);
-    }
+    while (wl_display_dispatch(display) != -1 && !configured) {}
+}
 
+void mainloop() {
     int stride = width * 4;
     int size = stride * height;  // bytes
 
@@ -135,20 +139,29 @@ int main(void) {
     struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, size);
 
     // allocate the buffer in that pool
-    struct wl_buffer *buffer = wl_shm_pool_create_buffer(pool,
+    buffer = wl_shm_pool_create_buffer(pool,
         0, width, height, stride, WL_SHM_FORMAT_XRGB8888);
 
     wl_surface_attach(surface, buffer, 0, 0);
     wl_surface_commit(surface);
 
-    while (running) {
-        wl_display_dispatch(display);
+    while (wl_display_dispatch(display) != -1 && running) {
+        // wash your legs and go sleep
     }
+}
 
+void destroy() {
     xdg_toplevel_destroy(xdg_toplevel);
     xdg_surface_destroy(xdg_surface);
     wl_surface_destroy(surface);
     wl_buffer_destroy(buffer);
+}
 
+int main(void) {
+
+    configure();
+    mainloop();
+    destroy();
+    
     return 0;
 }
