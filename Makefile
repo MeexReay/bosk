@@ -1,18 +1,14 @@
 CC ?= gcc
-SRC = src/*.c xdg-shell-protocol.c
+SRC = bosk.c xdg-shell-protocol.c
 HEADERS = xdg-shell-client-protocol.h
 OUT = bosk
 
 CFLAGS ?= 
 PKG_CONFIG ?= pkg-config
 
-# Host deps
 WAYLAND_FLAGS = $(shell $(PKG_CONFIG) wayland-client --cflags --libs)
 WAYLAND_PROTOCOLS_DIR = $(shell $(PKG_CONFIG) wayland-protocols --variable=pkgdatadir)
-
-# Build deps
 WAYLAND_SCANNER = $(shell pkg-config --variable=wayland_scanner wayland-scanner)
-
 XDG_SHELL_PROTOCOL = $(WAYLAND_PROTOCOLS_DIR)/stable/xdg-shell/xdg-shell.xml
 
 all: $(OUT)

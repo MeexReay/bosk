@@ -9,7 +9,7 @@
 #include <wayland-client.h>
 #include <wayland-client-protocol.h>
 
-#include "../xdg-shell-client-protocol.h"
+#include "xdg-shell-client-protocol.h"
 
 struct wl_compositor *compositor;
 struct wl_shm *shm;
@@ -21,6 +21,9 @@ bool running = true;
 struct wl_surface *surface;
 struct xdg_surface *xdg_surface;
 struct xdg_toplevel *xdg_toplevel;
+    
+int width = 200;
+int height = 200;
 
 void registry_global_handler
 (
@@ -112,13 +115,12 @@ int main(void) {
     xdg_surface_add_listener(xdg_surface, &xdg_surface_listener, NULL);
     xdg_toplevel_add_listener(xdg_toplevel, &xdg_toplevel_listener, NULL);
 
-		wl_surface_commit(surface);
+    wl_surface_commit(surface);
+
     while (!configured) {
         wl_display_dispatch(display);
     }
-    
-    int width = 200;
-    int height = 200;
+
     int stride = width * 4;
     int size = stride * height;  // bytes
 
@@ -143,10 +145,10 @@ int main(void) {
         wl_display_dispatch(display);
     }
 
-	  xdg_toplevel_destroy(xdg_toplevel);
-	  xdg_surface_destroy(xdg_surface);
-	  wl_surface_destroy(surface);
-	  wl_buffer_destroy(buffer);
+    xdg_toplevel_destroy(xdg_toplevel);
+    xdg_surface_destroy(xdg_surface);
+    wl_surface_destroy(surface);
+    wl_buffer_destroy(buffer);
 
     return 0;
 }
