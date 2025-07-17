@@ -1,2 +1,2 @@
 # bosk
-better OSK
+better wayland OSK
